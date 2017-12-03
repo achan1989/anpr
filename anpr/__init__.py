@@ -163,16 +163,45 @@ class DataSearcher(object):
         else:
             raise Exception("Unknown group type:{}".format(type(group_or_rows)))
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Script for loading data from anpr spreadsheets into a db")
-    parser.add_argument("xlsx_dir", help="path to the directory where the spreadsheets are")
-    parser.add_argument("dbname", help="name of the db to create")
-    parser.add_argument("password", help="password to the database")
+    args = parse_args()
+    if args.command_name == "load":
+        do_load_command(args)
+    elif args.command_name == "create":
+        do_create_command(args)
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Script for loading data from anpr spreadsheets into a db")
+    parser.add_argument(
+        "--dbname", required=True, help="name of the db to create")
+    parser.add_argument(
+        "--password", required=True, help="password to the database")
+    subparsers = parser.add_subparsers(dest="command_name")
+
+    load = subparsers.add_parser(
+        "load", help="Load data into an existing database")
+    load.add_argument(
+        "xlsx_dir", help="path to the directory where the spreadsheets are")
+
+    create = subparsers.add_parser(
+        "create", help="Create the database")
+
     args = parser.parse_args()
-    for spreadsheet in glob.glob(os.path.join(os.path.abspath(args.xlsx_dir), "*.xlsx")):
+    return args
+
+def do_load_command(args):
+    for spreadsheet in glob.glob(
+            os.path.join(os.path.abspath(args.xlsx_dir), "*.xlsx")):
+        print("loading {!r}...".format(spreadsheet))
         wb = openpyxl.load_workbook(filename=spreadsheet, read_only=True)
         DataLoader(wb, args.dbname, args.password).load()
-        print("loaded:{}".format(spreadsheet))
+        print("loaded")
+
+def do_create_command(args):
+    print("TODO")
+
 
 if __name__=="__main__":
     main()
