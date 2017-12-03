@@ -9,9 +9,9 @@ import re
 import csv
 import functools
 
-import filters
-import groups
-import stats
+from anpr import filters
+from anpr import groups
+from anpr import stats
 
 
 CAMERA_START=1
@@ -163,8 +163,7 @@ class DataSearcher(object):
         else:
             raise Exception("Unknown group type:{}".format(type(group_or_rows)))
 
-
-if __name__=="__main__":
+def main():
     parser = argparse.ArgumentParser(description="Script for loading data from anpr spreadsheets into a db")
     parser.add_argument("xlsx_dir", help="path to the directory where the spreadsheets are")
     parser.add_argument("dbname", help="name of the db to create")
@@ -174,3 +173,6 @@ if __name__=="__main__":
         wb = openpyxl.load_workbook(filename=spreadsheet, read_only=True)
         DataLoader(wb, args.dbname, args.password).load()
         print("loaded:{}".format(spreadsheet))
+
+if __name__=="__main__":
+    main()
