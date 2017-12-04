@@ -1,13 +1,14 @@
-import openpyxl
-import psycopg2 as psy
-from psycopg2 import sql
 import datetime
 import glob
 import os
 import argparse
 import re
-import csv
 import functools
+
+import openpyxl
+import psycopg2 as psy
+from psycopg2 import sql
+from fastkml import kml
 
 from anpr import filters
 from anpr import groups
@@ -178,6 +179,9 @@ def parse_args():
         "--dbname", required=True, help="name of the db to create")
     parser.add_argument(
         "--password", required=True, help="password to the database")
+    parser.add_argument(
+        "--user", required=True,
+        help="the username used to access the database")
     subparsers = parser.add_subparsers(dest="command_name")
 
     load = subparsers.add_parser(
@@ -187,6 +191,8 @@ def parse_args():
 
     create = subparsers.add_parser(
         "create", help="Create the database")
+    create.add_argument(
+        "cameras", help="Path to the file that defines the cameras")
 
     args = parser.parse_args()
     return args
@@ -200,7 +206,74 @@ def do_load_command(args):
         print("loaded")
 
 def do_create_command(args):
-    print("TODO")
+    """Create the initial database tables.
+
+    Pre-requisites: the database must already exist, and the PostGIS extension
+    must already be installed. Doing this requires admin-ish rights, so this
+    function won't try to do it automatically.
+
+    The location of the ANPR cameras is not contained directly within the
+    spreadsheets alongside the trip data. Rather, that data is exposed as a
+    set of location markers in Google Maps (linked to in the Location Plan
+    within each spreadsheet).
+    We assume that this location data has been exported from Google Maps and
+    saved as a KML file.  This function parses the KML file to get a location
+    and description for each camera.
+
+    We create and populate the camera location table using this information.
+    We also create other empty tables that will hold the trip data (loaded in
+    a later stage).
+    """
+
+    with open(args.cameras, 'rb') as infile:
+        s=infile.read()
+    k = kml.KML()
+    k.from_string(s)
+
+    doc = list(k.features())[0]
+    placemarks = doc.features()
+
+    cameras = []
+    for place in placemarks:
+        name = place.name
+        assert place.geometry.geom_type == "Point"
+        # Weird unpacking -- it's a tuple of a tuple.
+        (x, y, z), = place.geometry.coords
+        description = [e.value for e in place.extended_data.elements
+                       if e.name == "Description"][0]
+        cameras.append((name, description, x, y))
+
+    with make_connection(args) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT postgis_full_version();")
+            ver, = cur.fetchone()
+            if not "POSTGIS=" in ver:
+                raise RuntimeError("DB does not seem to have PostGIS installed")
+
+        with conn.cursor() as cur:
+            # Make the table of cameras.
+            cur.execute(
+                "CREATE TABLE cameras ("
+                "id varchar(10) PRIMARY KEY, "
+                "description text, "
+                "location geometry NOT NULL"
+                ");"
+            )
+            # And populate it.
+            for name, description, x, y in cameras:
+                ewkt = "SRID=4326;POINT({:.6f} {:.6f})".format(x, y)
+                cur.execute(
+                    "INSERT INTO cameras (id, description, location) "
+                    "VALUES (%s, %s, ST_GeomFromEWKT(%s));",
+                    (name, description, ewkt)
+                )
+
+    raise NotImplementedError("TODO create other tables")
+
+def make_connection(args):
+    conn = psy.connect(
+        dbname=args.dbname, user=args.user, password=args.password)
+    return conn
 
 
 if __name__=="__main__":

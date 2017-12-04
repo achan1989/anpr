@@ -27,7 +27,8 @@ setup(
 
     install_requires=[
         'openpyxl',
-        'psycopg2 >= 2.7'
+        'psycopg2 >= 2.7',
+        'fastkml'
     ],
 
     entry_points={
