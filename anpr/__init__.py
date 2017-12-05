@@ -15,9 +15,18 @@ from anpr import groups
 from anpr import stats
 
 
+UNINTERESTING_SHEETS = (
+    "Front Cover", "Contents Page", "Location Plan", "Summary", "Trip Arrays")
+CAMERA_ID_CELL = "C4"
+
 CAMERA_START=1
 CAMERA_END=97
 DATA_START_ROW = 12
+DATA_START_COL = 2
+DATA_END_COL = 6
+
+CHAIN_DIRECTION_REGEX = re.compile("^.*?_(N|E|S|W|IN|OUT)>")
+
 
 def make_journeys_table(dbname, password):
     conn = psy.connect("dbname={} password={}".format(dbname, password))
@@ -41,18 +50,50 @@ class DataLoader:
         self.conn = db_connection
 
     def load(self):
-        for camera_name in self.get_camera_names():
-            print("loading camera:{}".format(camera_name))
-            try:
-                ws = self.wb[camera_name]
-            except KeyError:
-                ws = None
-            if ws:
-                [self.load_journey(row[1:6]) for row in ws.iter_rows(min_row=DATA_START_ROW)]
+        camera_sheets = [sheet for sheet in self.wb.worksheets
+                         if sheet.title not in UNINTERESTING_SHEETS]
+        for sheet in camera_sheets:
+            # Sanity check -- can be pretty sure we're loading camera data.
+            camera_name = sheet.title
+            check = str(sheet[CAMERA_ID_CELL].value)
+            if camera_name not in (check, "0"+check):
+                raise ValueError(
+                    "Sheet titled {!r} doesn't look like camera data".format(
+                        camera_name))
 
-    def get_camera_names(self):
-        camera_names = ["{:02d}".format(camera) for camera in range(CAMERA_START, CAMERA_END) if camera not in [35, 5, 15, 39, 40, 51, 88]]
-        return camera_names +  ["35A", "35B"]
+            print("Loading trips starting at camera {}".format(sheet.title))
+            for row in sheet.iter_rows(
+                    min_row=DATA_START_ROW,
+                    min_col=DATA_START_COL, max_col=DATA_END_COL):
+                self.load_chain(row, camera_name)
+
+    def load_chain(self, row, camera_name):
+        timestamp, veh_class, _tot_mins, chain, details = row
+
+        if not isinstance(timestamp.value, datetime.datetime):
+            raise ValueError(
+                "Expected a datetime from cell {}{}, was {}".format(
+                    timestamp.column, timestamp.row, type(timestamp.value)))
+        timestamp = timestamp.value
+        veh_class = veh_class.value
+
+        initial_camera = camera_name
+        match = CHAIN_DIRECTION_REGEX.match(chain.value)
+        if not match:
+            raise ValueError(
+                "Could not extract the initial direction from the chain in "
+                "cell {}{}: {!r}".format(chain.column, chain.row, chain.value))
+        initial_direction = match.group(1)
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO vehicles (class) VALUES (%s)"
+                "RETURNING id;",
+                (veh_class,)
+            )
+            vehicle_id = cur.fetchone()
+
+        raise NotImplementedException("TODO continue chain loading")
 
     def load_journey(self, row):
         '''
