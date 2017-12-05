@@ -33,10 +33,12 @@ def make_journeys_table(dbname, password):
     conn.commit()
 
 
-class DataLoader(object):
-    def __init__(self, wb, dbname, password):
+class DataLoader:
+    def __init__(self, spreadsheet_path, db_connection):
+        wb = openpyxl.load_workbook(
+            filename=spreadsheet_path, read_only=True)
         self.wb = wb
-        self.conn = psy.connect("dbname={} password={}".format(dbname, password))
+        self.conn = db_connection
 
     def load(self):
         for camera_name in self.get_camera_names():
@@ -198,11 +200,11 @@ def parse_args():
     return args
 
 def do_load_command(args):
-    for spreadsheet in glob.glob(
+    for spreadsheet_path in glob.glob(
             os.path.join(os.path.abspath(args.xlsx_dir), "*.xlsx")):
-        print("loading {!r}...".format(spreadsheet))
-        wb = openpyxl.load_workbook(filename=spreadsheet, read_only=True)
-        DataLoader(wb, args.dbname, args.password).load()
+        print("loading {!r}...".format(spreadsheet_path))
+        DataLoader(
+            spreadsheet_path, db_connection=make_connection(args)).load()
         print("loaded")
 
 def do_create_command(args):
@@ -236,7 +238,10 @@ def do_create_command(args):
     cameras = []
     for place in placemarks:
         name = place.name
-        assert place.geometry.geom_type == "Point"
+        if place.geometry.geom_type != "Point":
+            raise ValueError(
+                "Placemark {!r} has a geometry type of {!r} "
+                "(expected Point)".format(name, place.geometry.geom_type))
         # Weird unpacking -- it's a tuple of a tuple.
         (x, y, z), = place.geometry.coords
         description = [e.value for e in place.extended_data.elements
@@ -282,7 +287,7 @@ def do_create_command(args):
                     "'Taxi'"
                 ");"
             )
-            # Make the table of vehicles.
+            # Make the vehicle table.
             cur.execute(
                 "CREATE TABLE vehicles ("
                 "id integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY, "
