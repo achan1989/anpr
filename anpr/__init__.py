@@ -268,7 +268,50 @@ def do_create_command(args):
                     (name, description, ewkt)
                 )
 
-    raise NotImplementedError("TODO create other tables")
+        with conn.cursor() as cur:
+            # Make the vehicle class enum type.
+            cur.execute(
+                "CREATE TYPE veh_class AS ENUM ("
+                    "'Bus_Coach', "
+                    "'Car', "
+                    "'LGV<3.5T', "
+                    "'Motorcycle', "
+                    "'OGV1', "
+                    "'OGV2', "
+                    "'Other', "
+                    "'Taxi'"
+                ");"
+            )
+            # Make the table of vehicles.
+            cur.execute(
+                "CREATE TABLE vehicles ("
+                "id integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY, "
+                "class veh_class NOT NULL"
+                ");"
+            )
+
+        with conn.cursor() as cur:
+            # Make the direction enum type.
+            cur.execute(
+                "CREATE TYPE direction AS ENUM ("
+                    "'N', "
+                    "'S', "
+                    "'E', "
+                    "'W', "
+                    "'IN', "
+                    "'OUT'"
+                ");"
+            )
+            # Make the capture table.
+            cur.execute(
+                "CREATE TABLE captures ("
+                "id integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY, "
+                "camera varchar(10) NOT NULL REFERENCES cameras (id), "
+                "vehicle integer NOT NULL REFERENCES vehicles (id), "
+                "direction direction NOT NULL, "
+                "ts timestamptz NOT NULL"
+                ");"
+            )
 
 def make_connection(args):
     conn = psy.connect(
