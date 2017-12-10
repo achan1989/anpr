@@ -279,6 +279,15 @@ def do_create_command(args):
     cameras = []
     for place in placemarks:
         name = place.name
+        # 1-9 -> 01-09
+        try:
+            num = int(name)
+        except Exception:
+            pass
+        else:
+            if num < 10:
+                name = "0"+name
+
         if place.geometry.geom_type != "Point":
             raise ValueError(
                 "Placemark {!r} has a geometry type of {!r} "
@@ -297,7 +306,10 @@ def do_create_command(args):
                 raise RuntimeError("DB does not seem to have PostGIS installed")
 
         with conn.cursor() as cur:
-            # Make the table of cameras.
+            # (Re)make the table of cameras.
+            cur.execute(
+                "DROP TABLE IF EXISTS cameras CASCADE;"
+            )
             cur.execute(
                 "CREATE TABLE cameras ("
                 "id varchar(10) PRIMARY KEY, "
@@ -315,7 +327,10 @@ def do_create_command(args):
                 )
 
         with conn.cursor() as cur:
-            # Make the vehicle class enum type.
+            # (Re)make the vehicle class enum type.
+            cur.execute(
+                "DROP TYPE IF EXISTS veh_class CASCADE;"
+            )
             cur.execute(
                 "CREATE TYPE veh_class AS ENUM ("
                     "'Bus_Coach', "
@@ -328,7 +343,10 @@ def do_create_command(args):
                     "'Taxi'"
                 ");"
             )
-            # Make the vehicle table.
+            # (Re)make the vehicle table.
+            cur.execute(
+                "DROP TABLE IF EXISTS vehicles CASCADE;"
+            )
             cur.execute(
                 "CREATE TABLE vehicles ("
                 "id integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY, "
@@ -337,7 +355,10 @@ def do_create_command(args):
             )
 
         with conn.cursor() as cur:
-            # Make the direction enum type.
+            # (Re)make the direction enum type.
+            cur.execute(
+                "DROP TYPE IF EXISTS direction CASCADE;"
+            )
             cur.execute(
                 "CREATE TYPE direction AS ENUM ("
                     "'N', "
@@ -348,7 +369,10 @@ def do_create_command(args):
                     "'OUT'"
                 ");"
             )
-            # Make the capture table.
+            # (Re)make the capture table.
+            cur.execute(
+                "DROP TABLE IF EXISTS captures CASCADE;"
+            )
             cur.execute(
                 "CREATE TABLE captures ("
                 "id integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY, "
