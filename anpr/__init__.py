@@ -26,6 +26,7 @@ DATA_START_COL = 2
 DATA_END_COL = 6
 
 CHAIN_DIRECTION_REGEX = re.compile("^.*?_(N|E|S|W|IN|OUT)>")
+DESTINATIONS_REGEX = re.compile(r">(.*?)_(N|E|S|W|IN|OUT)\(([\d\.]+)\)")
 
 
 def make_journeys_table(dbname, password):
@@ -62,38 +63,69 @@ class DataLoader:
                         camera_name))
 
             print("Loading trips starting at camera {}".format(sheet.title))
+            # In case sheets report an incorrect size.
+            sheet.max_row = None
+            sheet.max_column = None
+            cursor = self.conn.cursor()
             for row in sheet.iter_rows(
                     min_row=DATA_START_ROW,
                     min_col=DATA_START_COL, max_col=DATA_END_COL):
-                self.load_chain(row, camera_name)
+                self.load_chain(row, camera_name, cursor)
 
-    def load_chain(self, row, camera_name):
+        self.conn.commit()
+
+    def load_chain(self, row, camera_name, cursor):
         timestamp, veh_class, _tot_mins, chain, details = row
+
+        if timestamp.value is None:
+            print(
+                "Empty row in '{}' cell {}:{}".format(
+                camera_name, timestamp.column, timestamp.row))
+            return
 
         if not isinstance(timestamp.value, datetime.datetime):
             raise ValueError(
-                "Expected a datetime from cell {}{}, was {}".format(
+                "Expected a datetime from cell {}:{}, was {}".format(
                     timestamp.column, timestamp.row, type(timestamp.value)))
         timestamp = timestamp.value
         veh_class = veh_class.value
+
+        cursor.execute(
+            "INSERT INTO vehicles (class) VALUES (%s)"
+            "RETURNING id;",
+            (veh_class,)
+        )
+        vehicle_id = cursor.fetchone()
 
         initial_camera = camera_name
         match = CHAIN_DIRECTION_REGEX.match(chain.value)
         if not match:
             raise ValueError(
                 "Could not extract the initial direction from the chain in "
-                "cell {}{}: {!r}".format(chain.column, chain.row, chain.value))
+                "cell {}:{}: {!r}".format(chain.column, chain.row, chain.value))
         initial_direction = match.group(1)
+        cursor.execute(
+            "INSERT INTO captures (camera, vehicle, direction, ts)"
+            "VALUES (%s, %s, %s, %s);",
+            (initial_camera, vehicle_id, initial_direction, timestamp)
+        )
 
-        with self.conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO vehicles (class) VALUES (%s)"
-                "RETURNING id;",
-                (veh_class,)
+        found_one = False
+        next_ts = timestamp
+        for match in DESTINATIONS_REGEX.finditer(details.value):
+            found_one = True
+            next_camera = match.group(1)
+            next_direction = match.group(2)
+            next_duration = float(match.group(3))
+            next_ts = next_ts + datetime.timedelta(minutes=next_duration)
+            cursor.execute(
+                "INSERT INTO captures (camera, vehicle, direction, ts)"
+                "VALUES (%s, %s, %s, %s);",
+                (next_camera, vehicle_id, next_direction, next_ts)
             )
-            vehicle_id = cur.fetchone()
-
-        raise NotImplementedException("TODO continue chain loading")
+        assert found_one, (
+            "No trip details found in cell {}:{}".format(
+            details.column, details.row))
 
     def load_journey(self, row):
         '''
