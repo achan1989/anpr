@@ -13,6 +13,7 @@ from fastkml import kml
 from anpr import filters
 from anpr import groups
 from anpr import stats
+import anpr.web
 
 
 UNINTERESTING_SHEETS = (
@@ -246,6 +247,8 @@ def main():
         do_load_command(args)
     elif args.command_name == "create":
         do_create_command(args)
+    elif args.command_name == "web":
+        anpr.web.start(args)
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -268,6 +271,9 @@ def parse_args():
         "create", help="Create the database")
     create.add_argument(
         "cameras", help="Path to the file that defines the cameras")
+
+    web = subparsers.add_parser(
+        "web", help="Start the web interface")
 
     args = parser.parse_args()
     return args

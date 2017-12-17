@@ -28,7 +28,9 @@ setup(
     install_requires=[
         'openpyxl',
         'psycopg2 >= 2.7',
-        'fastkml'
+        'fastkml',
+        'pyramid',
+        'waitress'
     ],
 
     entry_points={
