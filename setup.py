@@ -30,7 +30,8 @@ setup(
         'psycopg2 >= 2.7',
         'fastkml',
         'pyramid',
-        'waitress'
+        'waitress',
+        'geojson'
     ],
 
     entry_points={
