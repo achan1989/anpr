@@ -2,7 +2,9 @@
 
 #svg_layer { position: relative; }
 
-.trip_path { opacity: 0.7; }
+.trip_not_started { opacity: 0; }
+
+.trip_running { opacity: 0.7; }
 
 path {
   fill: none;

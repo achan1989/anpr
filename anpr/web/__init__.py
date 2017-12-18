@@ -118,9 +118,13 @@ order by vehicle;
                     # except Exception:
                     #     import pdb
                     #     pdb.post_mortem()
+
+                    # This trip started n seconds after the o'clock.
+                    start_offset = (timestamps[0].minute * 60) + timestamps[0].second
                     properties = {
                         "vehicle_type": veh_class,
                         # "timestamps": timestamps,
+                        "start_offset": start_offset,
                         "trip_cum_metres": cum_metres,
                         "trip_cum_seconds": cum_seconds
                     }

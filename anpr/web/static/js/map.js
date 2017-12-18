@@ -4,7 +4,10 @@ var map;
 var svg;
 var svg_grp;
 
-var trace_len = 20;
+var TRACE_LEN = 20;
+// Seconds are multiplied by TIME_FACTOR to get milliseconds for the web map.
+// Speed is 20x real time.
+var TIME_FACTOR = (1000 / 20);
 var data_chunks = [];
 
 var transform = d3.geoTransform({point: projectPoint});
@@ -70,7 +73,7 @@ function load_chunk_for_hour(hour) {
             .data(data.features)
             .enter().append("path")
                 .attr("d", path_gen)
-                .classed("trip_path", true);
+                .classed("trip_not_started", true);
 
         reset();
         svg.selectAll("path").each(transition);
@@ -79,19 +82,30 @@ function load_chunk_for_hour(hour) {
 
 function transition(d, i, nodes) {
     var path = d3.select(this);
-    path.attr("stroke-dasharray", trace_len + "," + this.getTotalLength());
-    path.attr("stroke-dashoffset", trace_len);
+    path.attr("stroke-dasharray", TRACE_LEN + "," + this.getTotalLength());
+    path.attr("stroke-dashoffset", TRACE_LEN);
     path.transition()
-        .duration(60000)
+        .delay(function(d,i) {
+            return d.properties.start_offset * TIME_FACTOR;
+        })
+        .duration(function(d,i) {
+            var secs_list = d.properties.trip_cum_seconds;
+            return secs_list[secs_list.length - 1] * TIME_FACTOR;
+        })
         .ease(d3.easeLinear)
-        .attrTween("stroke-dashoffset", tweenDash);
-        //.on("end", function() { d3.select(this).call(transition); });// infinite loop
+        .on("start", function(d,i) {
+            d3.select(this)
+                .classed("trip_not_started", false)
+                .classed("trip_running", true)
+        })
+        .attrTween("stroke-dashoffset", tweenDash)
+        .remove();
 }
 
 function tweenDash() {
     // `this` is an svg->g->path
     var len = this.getTotalLength();
-    var i = d3.interpolateNumber(trace_len, -(len - trace_len));
+    var i = d3.interpolateNumber(TRACE_LEN, -(len - TRACE_LEN));
     return i;
     /*
     return function(t) {
