@@ -11,6 +11,9 @@ import geojson
 import psycopg2 as psy
 
 
+SQL_DT_FMT = "2017-06-10 {hour:02d}:00:00+01"
+
+
 @view_config(route_name='main', request_method='GET')
 def main_view(request):
     here = os.path.dirname(__file__)
@@ -22,6 +25,11 @@ class ApiView:
     def __init__(self, request):
         self.request = request
         self.settings = request.registry.settings
+        self.day = request.matchdict["day"]
+        self.hour_start = int(request.matchdict["hour"])
+        if not 0 <= self.hour_start <= 23:
+            raise ValueError("Hour must be between 0 and 23 inclusive")
+        self.hour_end = self.hour_start + 1
 
     @view_config(route_name="trip_geojson", renderer="geojson")
     def trip_geojson(self):
@@ -34,7 +42,13 @@ class ApiView:
                 cur.execute(
 """
 with ordered_cap as (
-    select cap.id, cap.vehicle, veh.class, cap.ts, cap.camera, cam.location from captures as cap
+    select cap.id, cap.vehicle, veh.class, cap.ts, cap.camera, cam.location
+    from captures as cap
+    join (
+        select distinct vehicle, min(ts) over (partition by vehicle) as ts
+        from captures
+        order by ts
+    ) as trip_start on trip_start.vehicle = cap.vehicle and trip_start.ts < %s
     join cameras as cam on cam.id = cap.camera
     join vehicles as veh on cap.vehicle = veh.id
     order by vehicle, ts
@@ -76,7 +90,8 @@ select vehicle, class, ST_AsGeoJSON(ST_MakeLine(location order by ts)),
 from cap_cum as cap
 group by vehicle, class
 order by vehicle;
-"""
+""",
+                (SQL_DT_FMT.format(hour=self.hour_end),)
                 )
 
                 # import itertools
@@ -132,7 +147,9 @@ def start(args):
         config.add_route("main", "/")
         config.add_static_view(name='static', path='anpr.web:static')
 
-        config.add_route("trip_geojson", "/api/trip.geojson")
+        config.add_route(
+            "trip_geojson",
+            "/api/by-hour/{day}/{hour}/data.geojson")
 
         geojson_renderer = pyramid.renderers.JSON(serializer=geojson.dumps)
         def datetime_adapter(obj, request):
